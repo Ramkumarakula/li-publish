@@ -1,0 +1,97 @@
+diff --git a/detect.py b/detect.py
+index bd306ab..e707acc 100644
+--- a/detect.py
++++ b/detect.py
+@@ -38,6 +38,10 @@ CONTRACTIONS = re.compile(r"\b\w+'(?:s|t|re|ve|ll|d|m)\b", re.IGNORECASE)
+ PRONOUNS = re.compile(r"\b(i|me|my|mine|we|us|our|you|your)\b", re.IGNORECASE)
+ NUMBERS = re.compile(r"\b\d[\d,.]*%?\b|\$\d")
+ PROPER = re.compile(r"(?<![.!?]\s)(?<!^)\b[A-Z][a-z]{2,}\b", re.MULTILINE)
++# Emoji ZWJ sequences and tag flags carry invisible chars by design; not a fingerprint.
++_EMO = "[\U0001F000-\U0001FAFF\u2300-\u23FF\u2600-\u27BF\u2B00-\u2BFF][\uFE0F\U0001F3FB-\U0001F3FF]*"
++EMOJI_SEQ_RE = re.compile("\U0001F3F4[\U000E0020-\U000E007E]+\U000E007F|"
++                          + _EMO + "(?:\u200D" + _EMO + ")+")
+ 
+ 
+ def clamp(n):
+@@ -105,7 +109,7 @@ def check_slop(text, lex):
+ 
+ def check_fingerprint(text):
+     """Characters a phone keyboard does not produce."""
+-    invisible = sum(1 for c in text if unicodedata.category(c) == "Cf")
++    invisible = sum(1 for c in EMOJI_SEQ_RE.sub("", text) if unicodedata.category(c) == "Cf")
+     em = text.count("—")
+     curly = sum(text.count(c) for c in "‘’“”")
+     ellip = text.count("…")
+diff --git a/humanize.py b/humanize.py
+index 415d2f4..ca3cab3 100644
+--- a/humanize.py
++++ b/humanize.py
+@@ -37,6 +37,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
+ LEX = os.path.join(HERE, "slop.json")
+ 
+ URL_RE = re.compile(r"https?://\S+|www\.\S+|\S+@\S+\.\S+")
++# Emoji sequences that legitimately contain invisible characters: ZWJ joins
++# (man technologist, heart on fire) and tag-character flags (Scotland). Protected whole, so the invisible
++# pass still strips any ZWJ or tag character that is not part of one.
++_EMO = "[\U0001F000-\U0001FAFF\u2300-\u23FF\u2600-\u27BF\u2B00-\u2BFF][\uFE0F\U0001F3FB-\U0001F3FF]*"
++EMOJI_SEQ_RE = re.compile("\U0001F3F4[\U000E0020-\U000E007E]+\U000E007F|"
++                          + _EMO + "(?:\u200D" + _EMO + ")+")
+ SENT_RE = re.compile(r"[^.!?\n]+[.!?]*")
+ 
+ 
+@@ -53,20 +59,20 @@ def _cp(spec):
+     return int(spec[2:], 16)
+ 
+ 
+-def protect_urls(text):
+-    """Swap URLs for placeholders so no pass rewrites inside a link."""
++def protect_urls(text, pattern=URL_RE, tag="URL"):
++    """Swap URLs (or emoji sequences) for placeholders so no pass rewrites inside them."""
+     found = []
+ 
+     def stash(m):
+         found.append(m.group(0))
+-        return f"\x00URL{len(found) - 1}\x00"
++        return f"\x00{tag}{len(found) - 1}\x00"
+ 
+-    return URL_RE.sub(stash, text), found
++    return pattern.sub(stash, text), found
+ 
+ 
+-def restore_urls(text, found):
++def restore_urls(text, found, tag="URL"):
+     for i, url in enumerate(found):
+-        text = text.replace(f"\x00URL{i}\x00", url)
++        text = text.replace(f"\x00{tag}{i}\x00", url)
+     return text
+ 
+ 
+@@ -181,9 +187,11 @@ def scan_structures(text, lex):
+ 
+ def humanize(text, lex):
+     text, urls = protect_urls(text)
++    text, emoji = protect_urls(text, EMOJI_SEQ_RE, "EMO")
+     text, inv = pass_invisible(text, lex)
+     text, typo = pass_typographic(text, lex)
+     text, lexi = pass_lexical(text, lex)
++    text = restore_urls(text, emoji, "EMO")
+     text = restore_urls(text, urls)
+     return text.strip() + "\n", {
+         "invisible": inv,
+diff --git a/slop.json b/slop.json
+index cb7e6c4..634d049 100644
+--- a/slop.json
++++ b/slop.json
+@@ -753,9 +753,9 @@
+     },
+     {
+       "id": "rocket",
+-      "regex": "[\\U0001F680\\U0001F525\\U0001F4A1\\u2728\\U0001F3AF]",
+-      "name": "Rocket / fire / bulb / sparkle / dart emoji",
+-      "fix": "One emoji max, and not one of these five."
++      "regex": "[\\U0001F680\\U0001F525\\U0001F4A1\\u2728]",
++      "name": "Rocket / fire / bulb / sparkle emoji",
++      "fix": "Avoid these four. (Dart 🎯 removed: voice.md uses it as a section marker.)"
+     },
+     {
+       "id": "hashtag-wall",

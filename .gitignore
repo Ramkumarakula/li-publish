@@ -1,0 +1,15 @@
+# Secrets and tokens - never commit
+.env
+.env.*
+!.env.example
+
+# Personal data
+voice.md
+log.md
+drafts/
+inbox/
+posted/
+
+# Python
+__pycache__/
+*.pyc
