@@ -35,6 +35,7 @@ VOICE_PATH = LI_HOME / "voice.md"
 DRAFTS_DIR = LI_HOME / "drafts"
 INBOX_DIR = LI_HOME / "inbox"
 POSTED_DIR = LI_HOME / "posted"
+ARCHIVE_DIR = LI_HOME / "archive"  # read by ram-engine; one folder per published post
 LOG_PATH = LI_HOME / "log.md"
 HUMAN_DIR = Path.home() / ".claude" / "skills" / "li-human"
 CLAUDE_TIMEOUT_SECONDS = 600
@@ -173,6 +174,21 @@ def archive_inbox(urn, url, text, image_note=None):
     return dest
 
 
+def archive_post(text, images=()):
+    """Copy the published text (and posted images) to archive/<YYYY-MM-DD>_<slug>/post.md."""
+    slug = re.sub(r"[^a-z0-9]+", "-", text.splitlines()[0].lower()).strip("-")[:50].strip("-") or "post"
+    base = ARCHIVE_DIR / f"{datetime.date.today().isoformat()}_{slug}"
+    dest, n = base, 1
+    while dest.exists():
+        n += 1
+        dest = base.with_name(f"{base.name}-{n}")
+    dest.mkdir(parents=True)
+    (dest / "post.md").write_text(text + "\n", encoding="utf-8")
+    for path in images:
+        shutil.copy2(str(path), str(dest / path.name))
+    return dest
+
+
 # ---------- shared ----------
 
 def show(text):
@@ -287,6 +303,10 @@ def main():
     url = post_url(urn)
     print(f"Posted: {url}")
     log_post(text, url)
+    try:  # before inbox/ is moved, so the images are still there to copy
+        print(f"Saved to {archive_post(text, [] if image_note else images)}")
+    except OSError as e:
+        print(f"Posted, but copying to archive/ failed: {e}. Copy the text there by hand.")
     if inbox:
         try:
             dest = archive_inbox(urn, url, text, image_note)
