@@ -163,7 +163,10 @@ text in as `post.md`, and posts only when you reply "go".
 - `--auto`: posts without the `Post? [y/N]` prompt. Use with care.
 
 Every published post is appended to `LI_HOME/log.md`, which `/li-audit` can
-read later.
+read later, and copied to `LI_HOME/archive/<YYYY-MM-DD>_<slug>/post.md`
+(plus the images that were attached). The slug comes from the post's first
+line. Other tools, such as ram-engine, read `archive/` as a record of what
+was published.
 
 ## What is NOT automated, and why
 
